@@ -1,0 +1,18 @@
+defaults:
+  - experiment: default_cnnlstm
+  - data: default
+  - model: cnnlstm
+  - optim: default_cnnlstm
+
+seed: 42
+ckpt_path: null
+fit: true
+test: true
+
+gpu: 0
+augment: true
+multi_gpu: false
+gpu_ids: [0, 1, 2, 3]  # if more than one gpu
+eval: false
+trained_path: '/home/cxx579/capture24_neurips/logs/models/26-08-2021_13:32:13_weighted_costTrue.mdl'
+

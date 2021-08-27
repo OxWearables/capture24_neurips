@@ -1,4 +1,10 @@
+# @package data
 name: default
 
-datadir: ~/capture24_neurips/prepared_data/
+datadir: /data/UKBB/capture24_neurips/prepared_data
+X_path: "${data.datadir}/X.npy"
+Y_path: "${data.datadir}/Y_willetts.npy"
+pid_path: "${data.datadir}/pid.npy"
 val_size: 20
+batch_size: 1  # indicate the number of subjects for cnnlstm
+

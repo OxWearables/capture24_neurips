@@ -1,3 +1,4 @@
+# @package _group_
 name: default
 train:
   batch_size: 512

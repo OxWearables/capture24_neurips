@@ -3,3 +3,4 @@ __pycache__
 outputs/*
 prepared_data/*
 prepared_data.tar.gz
+.idea/

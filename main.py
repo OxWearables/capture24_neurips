@@ -197,9 +197,9 @@ class DataModule(pl.LightningDataModule):
 
         data_cfg = self.data_cfg
 
-        X = np.load(os.path.join(data_cfg['datadir'], 'X.npy'))
-        Y = np.load(os.path.join(data_cfg['datadir'], 'Y_willetts.npy'))
-        pid = np.load(os.path.join(data_cfg['datadir'], 'pid.npy'))
+        X = np.load(data_cfg['X_path'])
+        Y = np.load(data_cfg['Y_path'])
+        pid = np.load(data_cfg['pid_path'])
 
         # deriv/test split: P001-P100 for derivation, the rest for testing
         whr_deriv = np.isin(pid, [f"P{i:03d}" for i in range(1,101)])

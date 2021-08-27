@@ -1,0 +1,15 @@
+defaults:
+  - experiment: default_cnnlstm
+  - data: ssl
+  - model: ssl
+  - optim: default_cnnlstm
+
+seed: 42
+ckpt_path: null
+fit: true
+test: true
+
+gpu: 2
+augment: true
+eval: false
+trained_path: '/home/cxx579/capture24_neurips/ssl_logs/models/26-08-2021_13:30:51_weighted_costTrue_freeze_False.mdl'

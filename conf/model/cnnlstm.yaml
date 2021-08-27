@@ -1,0 +1,28 @@
+# @package _group_
+# ResNet
+name: cnnlstm
+n_channels: 3
+outsize: 6
+n_filters: [128, 128, 256, 256, 512, 512]
+kernel_size: [3, 3, 3, 3, 3, 3]
+n_resblocks: [0, 3, 3, 3, 3, 3]
+resblock_kernel_size: [3, 3, 3, 3, 3, 3]
+downfactor: [2, 2, 2, 5, 5, 5]
+downorder: [0, 0, 0, 1, 1, 1]
+drop1: 0
+drop2: 0.5
+fc_size: 1024
+patience: 10
+
+# LSTM
+learning_rate: 0.0001
+isSmall: false
+graident_clip_val: 1
+dropout_p: 0
+bi_lstm: True
+lstm_nn_size: 512
+lstm_layer: 2
+pre_trained: false
+freeze_all: false
+model_path: /home/cxx579/capture24_neurips/logs/models
+weight_path: "${model.model_path}/10s.mdl"

@@ -2,6 +2,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from torch.autograd import Variable
+from torch.nn.utils.rnn import pack_padded_sequence, pad_packed_sequence
 
 
 class Downsample(nn.Module):
@@ -100,7 +102,7 @@ class Resnet(nn.Module):
                  downfactor_list,
                  downorder_list,
                  drop1, drop2,
-                 fc_size):
+                 fc_size, is_cnnLSTM=False):
         super(Resnet, self).__init__()
 
         # Broadcast if single number provided instead of list
@@ -134,13 +136,14 @@ class Resnet(nn.Module):
                                                                downfactor, downorder))
             in_channels = out_channels
 
-        # Fully-connected layer
-        resnet.add_module('fc', nn.Sequential(nn.Dropout2d(drop2),
-                                              nn.Conv1d(in_channels, fc_size, 1, 1, 0, bias=False),
-                                              nn.ReLU(True)))
+        if is_cnnLSTM is False:
+            # Fully-connected layer
+            resnet.add_module('fc', nn.Sequential(nn.Dropout2d(drop2),
+                                                  nn.Conv1d(in_channels, fc_size, 1, 1, 0, bias=False),
+                                                  nn.ReLU(True)))
 
-        # Final linear layer
-        resnet.add_module('final', nn.Conv1d(fc_size, outsize, 1, 1, 0, bias=False))
+            # Final linear layer
+            resnet.add_module('final', nn.Conv1d(fc_size, outsize, 1, 1, 0, bias=False))
 
         self.resnet = resnet
 
@@ -182,3 +185,113 @@ class Resnet(nn.Module):
 
     def forward(self, x):
         return self.resnet(x).reshape(x.shape[0], -1)
+
+
+class CNNLSTM(nn.Module):
+    def __init__(self, cnn_cfg, num_classes=2, lstm_layer=3, lstm_nn_size=1024,
+                 model_device='cpu', dropout_p=0, bidrectional=False, batch_size=10):
+        super(CNNLSTM, self).__init__()
+        if bidrectional==True:
+            fc_feature_size = lstm_nn_size*2
+        else:
+            fc_feature_size = lstm_nn_size
+        self.fc_feature_size = fc_feature_size
+        self.model_device = model_device
+        self.lstm_layer = lstm_layer
+        self.batch_size = batch_size
+        self.lstm_nn_size = lstm_nn_size
+        self.bidrectional = bidrectional
+
+        self.feature_extractor = Resnet(
+            cnn_cfg.model.n_channels,
+            cnn_cfg.model.outsize,
+            cnn_cfg.model.n_filters,
+            cnn_cfg.model.kernel_size,
+            cnn_cfg.model.n_resblocks,
+            cnn_cfg.model.resblock_kernel_size,
+            cnn_cfg.model.downfactor,
+            cnn_cfg.model.downorder,
+            cnn_cfg.model.drop1,
+            cnn_cfg.model.drop2,
+            cnn_cfg.model.fc_size,
+            is_cnnLSTM=True)
+
+        self.lstm = nn.LSTM(input_size=512, hidden_size=lstm_nn_size,
+                            num_layers=lstm_layer, bidirectional=bidrectional)
+        self.classifier = nn.Sequential(
+            nn.Linear(fc_feature_size, fc_feature_size),
+            nn.ReLU(True),
+            nn.Dropout(p=dropout_p),
+            nn.Linear(fc_feature_size, fc_feature_size),
+            nn.ReLU(True),
+            nn.Dropout(p=dropout_p),
+            nn.Linear(fc_feature_size, num_classes)
+        )
+
+    def init_hidden(self, batch_size):
+        # the weights are of the form (nb_layers, batch_size, nb_lstm_units)
+        init_lstm_layer = self.lstm_layer
+        if self.bidrectional:
+            init_lstm_layer = self.lstm_layer*2
+        hidden_a = torch.randn(init_lstm_layer, batch_size, self.lstm_nn_size, device=self.model_device)
+        hidden_b = torch.randn(init_lstm_layer, batch_size, self.lstm_nn_size, device=self.model_device)
+
+        hidden_a = Variable(hidden_a)
+        hidden_b = Variable(hidden_b)
+
+        return (hidden_a, hidden_b)
+
+    def forward(self, x, seq_lengths):
+        # x dim: batch_size x C x F_1
+        # we will need to do the packing of the sequence dynamically for each batch of input
+        # 1. feature extractor
+        x = self.feature_extractor(x)  # x dim: total_epoch_num * feature size
+        if x.size()[-1] == 1:
+            x = torch.squeeze(x, 2) # force the last dim to be of feature size
+        feature_size = x.size()[-1]
+
+        # 2. lstm
+        seq_tensor = torch.zeros(len(seq_lengths), seq_lengths.max(),
+                                feature_size, dtype=torch.float,
+                                device=self.model_device)
+        start_idx = 0
+
+        for i in range(len(seq_lengths)):
+
+            current_len = seq_lengths[i]
+            current_series = x[start_idx:start_idx+current_len, :]  # num_time_step x feature_size
+            current_series = current_series.view(1, current_series.size()[0], -1)
+
+            seq_tensor[i, :current_len, :] = current_series
+            start_idx += current_len
+
+        seq_lengths_ordered, perm_idx = seq_lengths.sort(0, descending=True)
+        seq_tensor = seq_tensor[perm_idx]
+        packed_input = pack_padded_sequence(seq_tensor, seq_lengths_ordered.cpu().numpy(), batch_first=True)
+
+        # x dim for lstm: #  batch_size_rnn x Sequence_length x F_2
+        # uncomment for random init state
+        # hidden = self.init_hidden(len(seq_lengths))
+        packed_output, _ = self.lstm(packed_input)
+        output, input_sizes = pad_packed_sequence(packed_output, batch_first=True)
+
+        # reverse back to the original order
+        _, unperm_idx = perm_idx.sort(0)
+        lstm_output = output[unperm_idx]
+
+        # reverse back to the originaly shape
+        # total_epoch_num * fc_feature_size
+        fc_tensor = torch.zeros(seq_lengths.sum(), self.fc_feature_size,
+                                dtype=torch.float, device=self.model_device)
+
+        start_idx = 0
+        for i in range(len(seq_lengths)):
+            current_len = seq_lengths[i]
+            current_series = lstm_output[i, :current_len, :]  # num_time_step x feature_size
+            current_series = current_series.view(current_len, -1)
+            fc_tensor[start_idx:start_idx + current_len, :] = current_series
+            start_idx += current_len
+
+        # 3. linear readout
+        x = self.classifier(fc_tensor)
+        return x

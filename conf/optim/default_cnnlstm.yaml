@@ -1,0 +1,9 @@
+# @package _group_
+name: default_cnnlstm
+
+method: 'adam'
+graident_clip_val: 1
+learning_rate: 0.0001
+bi_lstm: True
+weighted_cost: False
+

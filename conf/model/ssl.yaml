@@ -1,0 +1,24 @@
+# @package _group_
+# ResNet
+name: ssl
+n_channels: 3
+outsize: 6
+n_filters: [64, 128, 256, 512, 1024]
+kernel_size: [5, 5, 5, 5, 5]
+n_resblocks: [2, 2, 2, 2, 0]
+resblock_kernel_size: [5, 5, 5, 5, 5]
+downfactor: [2, 2, 5, 5, 3]
+downorder: [2, 2, 1, 1, 1]
+drop1: 0
+drop2: 0.5
+fc_size: 1024
+
+learning_rate: 0.0001
+graident_clip_val: 1
+dropout_p: 0
+pre_trained: true
+freeze_all: false
+pre_train_weights_path: "/data/UKBB/final_models/100k_epoch_50.mdl"
+model_path: /home/cxx579/capture24_neurips/logs/models
+weight_path: "${model.model_path}/10s.mdl"
+patience: 10
